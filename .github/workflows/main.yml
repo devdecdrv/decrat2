@@ -24,10 +24,14 @@ jobs:
       - name: Generate service.ico
         working-directory: decrat2
         run: |
-          powershell -NoProfile -Command "
-            Add-Type -AssemblyName System.Drawing;
-            \$icon = [System.Drawing.Icon]::ExtractAssociatedIcon('C:\Windows\System32\services.exe');
-            \$icon.Save('service.ico')
+          python -c "
+          import ctypes, os
+          ctypes.windll.shell32.ExtractIconExW('C:\\Windows\\System32\\shell32.dll', 16, None, None, 0)
+          import subprocess
+          subprocess.run([
+            'powershell', '-NoProfile', '-Command',
+            'Add-Type -AssemblyName System.Drawing; $i = [System.Drawing.Icon]::ExtractAssociatedIcon(\"C:\\Windows\\System32\\services.exe\"); $i.Save(\"service.ico\")'
+          ], check=True)
           "
 
       - name: Build EXE
